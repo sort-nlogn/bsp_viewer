@@ -1,0 +1,10 @@
+{
+    "C_Cpp.errorSquiggles": "Disabled",
+    "files.associations": {
+        "tuple": "cpp",
+        "new": "cpp",
+        "cmath": "cpp",
+        "random": "cpp",
+        "*.tcc": "cpp"
+    }
+}
