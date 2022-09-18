@@ -66,13 +66,34 @@ struct bsp_tree{
         return p;
     }
 
-    void construct_tree(vector<polygon> polygons){
+    bool is_visible(polygon &p, point3d view){
+        point3d p1 = p.points[0], p2 = p.points[1], p3 = p.points[2];
+        point3d u = {p2.x - p1.x, p2.y - p1.y, p2.z - p1.z};
+        point3d v = {p3.x - p1.x, p3.y - p1.y, p3.z - p1.z};
+        point3d n = cross(u, v);
+        point3d to_view = {view.x - p1.x, view.y - p1.y, view.z - p1.z};
+        return dot(n, to_view) > EPS;
+    }
+
+    vector<polygon> backface_culling(vector<polygon> polygons, point3d view){
+        vector<polygon> visible;
+
+        for(int i = 0; i < polygons.size(); i++){
+            if(is_visible(polygons[i], view))
+                visible.push_back(polygons[i]);
+        }
+
+        return visible;
+    }
+
+    void construct_tree(vector<polygon> &polygons, point3d view){
         root = nullptr;
         if (polygons.size() == 0)
             return;
 
         root = new node();
-        split_recursively(polygons, root);
+        vector<polygon> v = backface_culling(polygons, view);
+        split_recursively(v, root);
     }
 
     double get_sign(point3d p, plane pl){
@@ -325,33 +346,33 @@ int main(){
     { // prism
      { {{-0.5, -0.5, -2.0}, {0.0, -0.5, -2.8}, {0.5, -0.5, -2.0}},  RGB(204, 36, 29) },
      { {{-0.5,  0.5, -2.0}, {0.5,  0.5, -2.0}, {0.0,  0.5, -2.8}},  RGB(204, 36, 29) },
-     { {{-0.5, -0.5, -2.0}, {-0.5,  0.5, -2.0}, {0.5,  0.5, -2.0}, {0.5, -0.5, -2.0}}, RGB(152, 151, 26)},
+     { {{-0.5, -0.5, -2.0}, {0.5, -0.5, -2.0}, {0.5,  0.5, -2.0}, {-0.5,  0.5, -2.0}}, RGB(152, 151, 26)},
      { {{0.0, -0.5, -2.8}, {-0.5, -0.5, -2.0}, {-0.5, 0.5, -2.0}, {0.0,  0.5, -2.8}},  RGB(215, 153, 33)},
      { {{0.5, -0.5, -2.0}, {0.0, -0.5, -2.8}, {0.0,  0.5, -2.8}, {0.5,  0.5, -2.0}},   RGB(69, 133, 136)},
         // cube (now it's actually a pyramid (it should be))
      { {{-2.0, 1.0, -2.0}, {-2.0, 0.0, -2.0}, {-1.0, 0.0, -2.0}, {-1.0, 1.0, -2.0}},   RGB(177, 98, 134)},
      { {{-1.0, 0.0, -2.0}, {-1.0, 0.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 1.0, -2.0}},   RGB(104, 157, 122)},
-     { {{-2.0, 0.0, -2.0}, {-2.0, 0.0, -3.0}, {-2.0, 1.0, -3.0}, {-2.0, 1.0, -2.0}},   RGB(214, 93, 14)  },
-     { {{-2.0, 0.0, -2.0}, {-1.0, 0.0, -2.0}, {-1.0, 0.0, -3.0}, {-2.0, 0.0, -3.0}},   RGB(146, 131, 116)},
+     { {{-2.0, 0.0, -2.0}, {-2.0, 1.0, -2.0}, {-2.0, 1.0, -3.0}, {-2.0, 0.0, -3.0}},   RGB(214, 93, 14)  },
+     { {{-2.0, 0.0, -2.0}, {-2.0, 0.0, -3.0}, {-1.0, 0.0, -3.0}, {-1.0, 0.0, -2.0}},   RGB(146, 131, 116)},
      { {{-2.0, 1.0, -2.0}, {-1.0, 1.0, -2.0}, {-1.0, 1.0, -3.0}, {-2.0, 1.0, -3.0}},   RGB(251, 73, 53)  },
-     { {{-2.0, 0.0, -3.0}, {-1.0, 0.0, -3.0}, {-1.0, 1.0, -3.0}, {-2.0, 1.0, -3.0}},   RGB(184, 187, 38) }
+     { {{-2.0, 0.0, -3.0}, {-2.0, 1.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 0.0, -3.0}},   RGB(184, 187, 38) }
     };
 
     bsp_tree *t = new bsp_tree;
 
-    t->construct_tree(polygons);
+    bsp_tree::point3d view = {0.0, 0.0, 0.0};
+    t->construct_tree(polygons, view);
 
     int win = initwindow(width, height, "3d");
     setbkcolor(RGB(24, 24, 24));
 
-    bsp_tree::point3d view = {0.0, 0.0, 0.0};
     while(1){
         painters_algorithm(t, t->root, view);
         if(kbhit()){
             bool needs_4update = process_keyboard(polygons);
             if(needs_4update){
                 t->dealloc_nodes(t->root);
-                t->construct_tree(polygons);
+                t->construct_tree(polygons, view);
             }
         }
         render_shadow(polygons);
