@@ -18,11 +18,12 @@ using namespace std;
 
 #define norm3(v) sqrt(v.x*v.x + v.y*v.y + v.z*v.z)
 
-int selected_prism = 0;
+bool selected_prism = false;
 double centroid_prism[3] = {0.0, 0.0, -2.26666667};
 double centroid_cube[3] = {-1.5, 0.5, -2.5};
 
 double ground = -1.5;
+double light_dir[3] = {0.0, -1.0, 0.0};
 
 struct bsp_tree{
     struct point3d{double x, y, z;};
@@ -293,12 +294,15 @@ bool process_keyboard(vector<bsp_tree::polygon> &pos){
         rotate(pos, -0.256, 0.0, 0.0); return true;
     }else if(ch == 'm'){
         rotate(pos, 0.256, 0.0, 0.0); return true;
+    }else if((int)ch == 75){
+        light_dir[0] -= 0.1; return false;
+    }else if((int)ch == 77){
+        light_dir[0] += 0.1; return false;
     }
     return false;
 }
 
 void render_shadow(vector<bsp_tree::polygon> &polygons){
-    double light_dir[3] = {0.0, -1.0, 0.0};
 
     for(int i = 0; i < polygons.size(); i++){
         bsp_tree::polygon poly;
