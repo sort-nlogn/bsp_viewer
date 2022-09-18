@@ -8,7 +8,7 @@
 
 using namespace std;
 
-#define EPS 0.00000001
+#define EPS 0.000000001
 
 #define near_dist 1.0
 
@@ -102,29 +102,27 @@ struct bsp_tree{
         return res;
     }
 
-    pair<int, int> split_poly(polygon &p, plane pl){
-        pair<int, int> divide_line(-1, -1);
-        for(int i = 0; i < p.points.size(); i++){
-            double sign1 = get_sign(p.points[i], pl);
-            double sign2 = get_sign(p.points[(i + 1) % p.points.size()], pl);
-            if(abs(sign1) < EPS) // не рассматриваем рёбра, начало которых лежит в плоскости(в порядке обхода)
-                continue;
-            if(sign1 > EPS && sign2 > EPS || sign1 < -EPS && sign2 < -EPS) // если ребро лежит по одну сторону от плоскости
-                continue;
-            if(abs(sign2) > EPS){ // если ребро пересекает плоскость (в строгом смысле)
-                point3d div_p = plane_to_line_intersection(p.points[i], p.points[(i + 1) % p.points.size()], pl);
-                p.points.insert(p.points.begin() + i + 1, div_p); // вставляем точку пересечения на место второй точки, таким образом в индекс пересечения попадает либо новая точка либо вторая точка ребра, если она лежит в плоскости
+    pair<polygon, polygon> split_polygon(polygon &p, plane pl){
+        polygon a, b; a.color = p.color; b.color = p.color;
 
+        for(int i = 0; i < p.points.size(); i++){
+            double sgn1 = get_sign(p.points[i], pl), sgn2 = get_sign(p.points[(i + 1) % p.points.size()], pl);
+            if(sgn1 > EPS)
+                a.points.push_back(p.points[i]);
+            else if(sgn1 < -EPS)
+                b.points.push_back(p.points[i]);
+            else
+                continue;
+            if(abs(sgn2) < EPS){
+                a.points.push_back(p.points[(i + 1) % p.points.size()]);
+                b.points.push_back(p.points[(i + 1) % p.points.size()]);
+            }else if(sgn1 > EPS && sgn2 < -EPS || sgn1 < -EPS && sgn2 > EPS){
+                point3d i_point = plane_to_line_intersection(p.points[i], p.points[(i + 1) % p.points.size()], pl);
+                a.points.push_back(i_point);
+                b.points.push_back(i_point);
             }
-            if(divide_line.first == -1){
-                divide_line.first = (i + 1) % p.points.size();
-            }else{
-                divide_line.second = (i + 1) % p.points.size();
-                return divide_line;
-            }
-            i++;
         }
-        return divide_line;
+        return pair<polygon, polygon>(a, b);
     }
 
     void split_recursively(vector<polygon> &polygons, node *start_n){
@@ -144,20 +142,9 @@ struct bsp_tree{
             }else if(sgn == NEG){
                 neg.push_back(polygons[i]);
             }else if(sgn == HALF){
-                pair<int, int> div_line = split_poly(polygons[i], pl);
-                bool to_neg = get_sign(polygons[i].points[div_line.first + 1], pl) < -EPS;
-                polygon a, b;
-                for(int j = div_line.first; j < div_line.second; j++){
-                    a.points.push_back(polygons[i].points[j]);
-                }
-                a.points.push_back(polygons[i].points[div_line.second]);
-                for(int k = div_line.second; k != div_line.first; k++){
-                    k = k % polygons[i].points.size();
-                    b.points.push_back(polygons[i].points[k]);
-                }
-                b.points.push_back(polygons[i].points[div_line.first]);
-                a.color = polygons[i].color; b.color = polygons[i].color;
-                neg.push_back(to_neg? a: b); pos.push_back(to_neg? b: a);
+                pair<polygon, polygon> chunks= split_polygon(polygons[i], pl);
+                neg.push_back(chunks.second);
+                pos.push_back(chunks.first);
             }
         }
 
@@ -331,13 +318,13 @@ void render_shadow(vector<bsp_tree::polygon> &polygons){
 int main(){
     srand(time(NULL));
     vector<bsp_tree::polygon> polygons =
-    { // prisme
+    { // prism
      { {{-0.5, -0.5, -2.0}, {0.0, -0.5, -2.8}, {0.5, -0.5, -2.0}},  RGB(204, 36, 29) },
      { {{-0.5,  0.5, -2.0}, {0.5,  0.5, -2.0}, {0.0,  0.5, -2.8}},  RGB(204, 36, 29) },
      { {{-0.5, -0.5, -2.0}, {-0.5,  0.5, -2.0}, {0.5,  0.5, -2.0}, {0.5, -0.5, -2.0}}, RGB(152, 151, 26)},
      { {{0.0, -0.5, -2.8}, {-0.5, -0.5, -2.0}, {-0.5, 0.5, -2.0}, {0.0,  0.5, -2.8}},  RGB(215, 153, 33)},
      { {{0.5, -0.5, -2.0}, {0.0, -0.5, -2.8}, {0.0,  0.5, -2.8}, {0.5,  0.5, -2.0}},   RGB(69, 133, 136)},
-        // cube
+        // cube (now it's actually a pyramid (it should be))
      { {{-2.0, 1.0, -2.0}, {-2.0, 0.0, -2.0}, {-1.0, 0.0, -2.0}, {-1.0, 1.0, -2.0}},   RGB(177, 98, 134)},
      { {{-1.0, 0.0, -2.0}, {-1.0, 0.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 1.0, -2.0}},   RGB(104, 157, 122)},
      { {{-2.0, 0.0, -2.0}, {-2.0, 0.0, -3.0}, {-2.0, 1.0, -3.0}, {-2.0, 1.0, -2.0}},   RGB(214, 93, 14)  },
