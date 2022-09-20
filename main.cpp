@@ -8,9 +8,10 @@
 
 using namespace std;
 
-#define EPS 0.000000001
+#define EPS 0.00001
 
 #define near_dist 1.0
+#define far_dist 7.0
 
 #define width 1080
 #define height 720
@@ -19,14 +20,14 @@ using namespace std;
 #define norm3(v) sqrt(v.x*v.x + v.y*v.y + v.z*v.z)
 
 bool selected_prism = false;
-double centroid_prism[3] = {0.0, 0.0, -2.26666667};
-double centroid_cube[3] = {-1.5, 0.5, -2.5};
+float centroid_prism[3] = {0.0, 0.0, -2.26666667};
+float centroid_cube[3] = {-1.5, 0.5, -2.5};
 
-double ground = -1.5;
-double light_dir[3] = {0.0, -1.0, 0.0};
+float ground = -1.5;
+float light_dir[3] = {0.0, -1.0, 0.0};
 
-struct point3d{double x, y, z;};
-struct plane{double a, b, c, d;};
+struct point3d{float x, y, z;};
+struct plane{float a, b, c, d;};
 struct polygon{vector<point3d> points; int color;};
 
 struct node{
@@ -49,7 +50,7 @@ point3d cross(point3d u, point3d v){
     return res;
 }
 
-double dot(point3d p1, point3d p2){
+float dot(point3d p1, point3d p2){
     return p1.x * p2.x + p1.y * p2.y + p1.z * p2.z;
 }
 
@@ -79,7 +80,7 @@ vector<polygon> backface_culling(vector<polygon> polygons, point3d view){
     return visible;
 }
 
-double get_sign(point3d p, plane pl){
+float get_sign(point3d p, plane pl){
     return pl.a*p.x + pl.b*p.y + pl.c*p.z + pl.d;
 }
 
@@ -87,7 +88,7 @@ p_sign poly_type(polygon &p, plane pl){
     bool has_pos = false;
     bool has_neg = false;
     for(int i = 0; i < p.points.size(); i++){
-        double sgn = get_sign(p.points[i], pl);
+        float sgn = get_sign(p.points[i], pl);
         if(sgn > EPS)  has_pos = true;
         if(sgn < -EPS) has_neg = true;
     }
@@ -100,7 +101,7 @@ p_sign poly_type(polygon &p, plane pl){
 point3d plane_to_line_intersection(point3d p1, point3d p2, plane pl){
     point3d rd = {p2.x - p1.x, p2.y - p1.y, p2.z - p1.z};
     point3d n = {pl.a, pl.b, pl.c}; 
-    double t = -(pl.d + dot(p1, n)) / dot(rd, n);
+    float t = -(pl.d + dot(p1, n)) / dot(rd, n);
     point3d res = {p1.x + t*rd.x, p1.y + t*rd.y, p1.z + t*rd.z};
     return res;
 }
@@ -108,7 +109,7 @@ point3d plane_to_line_intersection(point3d p1, point3d p2, plane pl){
 pair<polygon, polygon> split_polygon(polygon &p, plane pl){
     polygon a, b; a.color = p.color; b.color = p.color;
     for(int i = 0; i < p.points.size(); i++){
-        double sgn1 = get_sign(p.points[i], pl), sgn2 = get_sign(p.points[(i + 1) % p.points.size()], pl);
+        float sgn1 = get_sign(p.points[i], pl), sgn2 = get_sign(p.points[(i + 1) % p.points.size()], pl);
         if(sgn1 > EPS)
             a.points.push_back(p.points[i]);
         else if(sgn1 < -EPS)
@@ -179,18 +180,40 @@ void dealloc_nodes(node *start_n){
     delete start_n;
 }
 
-void render_shape(polygon &poly){
+void render_shape(polygon &poly, bool wireframe_only){
+    plane near_plane = {0.0, 0.0, 1.0, near_dist};
+    plane far_plane = {0.0, 0.0, 1.0, far_dist};
+    p_sign near_sgn = poly_type(poly, near_plane);
+    p_sign far_sgn = poly_type(poly, far_plane);
+
+    if(near_sgn == POS || near_sgn == ON || far_sgn == NEG || far_sgn == ON)
+        return;
+    if(near_sgn == HALF)
+        poly = split_polygon(poly, near_plane).second;
+    if(far_sgn == HALF)
+        poly = split_polygon(poly, far_plane).first;
+    
+
     int *shape = new int[(poly.points.size() + 1) * 2 * sizeof(int)];
     for(int i = 0; i < poly.points.size(); i++){
-        double x = poly.points[i].x * ratio, y = poly.points[i].y, z = poly.points[i].z;
-        x = near_dist * x / (-z*0.8);
-        y = near_dist * y / (-z*0.8);
+        float x = poly.points[i].x * ratio, y = poly.points[i].y, z = poly.points[i].z;
+        x = near_dist * x / (-z * 0.8);
+        y = near_dist * y / (-z * 0.8);
         shape[2 * i] = (int)((x * 0.5 + 0.5) * width);
         shape[2 * i + 1] = (int)((-y * 0.5 + 0.5) * height);
     }
 
     shape[2 * poly.points.size()] = shape[0];
     shape[2 * poly.points.size() + 1] = shape[1];
+
+
+    if(wireframe_only){
+        setcolor(RGB(255, 255, 255));
+        for(int i = 0; i < poly.points.size(); i++){
+            line(shape[2 * i], shape[2 * i + 1], shape[2 * (i + 1)], shape[2 * (i + 1) + 1]);
+        }
+        return;
+    }
 
     // tone mapping
     int icol = poly.color;
@@ -211,32 +234,32 @@ void painters_algorithm(node *v, point3d view_p){
         return;
     if (v->l == nullptr && v->r == nullptr){
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i]);
+            render_shape(v->polygons[i], false);
         return;
     }
     plane pl = construct_plane(v->polygons[0].points[0], v->polygons[0].points[1], v->polygons[0].points[2]);
-    double view_sgn = get_sign(view_p, pl);
+    float view_sgn = get_sign(view_p, pl);
     if(view_sgn > EPS){
         painters_algorithm(v->l, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i]);
+            render_shape(v->polygons[i], false);
         painters_algorithm(v->r, view_p);
     }else if(view_sgn < -EPS){
         painters_algorithm(v->r, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i]);
+            render_shape(v->polygons[i], false);
         painters_algorithm(v->l, view_p);
     }else{
         painters_algorithm(v->l, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i]);
+            render_shape(v->polygons[i], false);
         painters_algorithm(v->r, view_p);
     }
 }
 
 
 
-void move(vector<polygon> &pos, double dx, double dy, double dz){
+void move(vector<polygon> &pos, float dx, float dy, float dz){
     for(int i = selected_prism? 0: 5; i < (selected_prism? 5: pos.size()); i++){
         for(int j = 0; j < pos[i].points.size(); j++){
             if(pos[i].points[j].y + dy <= ground / 2 && dy < 0.0)
@@ -260,14 +283,14 @@ void move(vector<polygon> &pos, double dx, double dy, double dz){
     }
 }
 
-void rotate(vector<polygon> &pos, double angle_x, double angle_z, double angle_y){
-    double *c = selected_prism ? centroid_prism: centroid_cube;
+void rotate(vector<polygon> &pos, float angle_x, float angle_z, float angle_y){
+    float *c = selected_prism ? centroid_prism: centroid_cube;
 
     for(int i = selected_prism? 0: 5; i < (selected_prism? 5: pos.size()); i++){
         for(int j = 0; j < pos[i].points.size(); j++){
-            double c1 = cos(angle_x), c2 = cos(angle_y), c3 = cos(angle_z);
-            double s1 = sin(angle_x), s2 = sin(angle_y), s3 = sin(angle_z);
-            double x = pos[i].points[j].x - c[0], y = pos[i].points[j].y - c[1], z = pos[i].points[j].z - c[2];
+            float c1 = cos(angle_x), c2 = cos(angle_y), c3 = cos(angle_z);
+            float s1 = sin(angle_x), s2 = sin(angle_y), s3 = sin(angle_z);
+            float x = pos[i].points[j].x - c[0], y = pos[i].points[j].y - c[1], z = pos[i].points[j].z - c[2];
             pos[i].points[j].x = y*(c3*s1*s2 - c1*s3) + z*(c1*c3*s2 + s1*s3) + c2*c3*x + c[0];
             pos[i].points[j].y = y*(c1*c3 + s1*s2*s3) + z*(c1*s2*s3 - c3*s1) + c2*s3*x + c[1];
             pos[i].points[j].z = c1*c2*z + c2*s1*y - s2*x + c[2];
@@ -286,6 +309,10 @@ bool process_keyboard(vector<polygon> &pos){
         move(pos, 0.0, -0.1, 0.0); return true;
     }else if(ch == 'd'){
         move(pos, 0.1, 0.0, 0.0); return true;
+    }else if(ch == 'f'){
+        move(pos, 0.0, 0.0, 0.1); return true;
+    }else if(ch == 'g'){
+        move(pos, 0.0, 0.0, -0.1); return true;
     }else if(ch == 'x'){
         selected_prism = selected_prism == 0? 1: 0; return false;
     }else if(ch == 'h'){
@@ -315,14 +342,20 @@ void render_shadow(vector<polygon> &polygons){
         for(int j = 0; j < polygons[i].points.size(); j++){
             point3d pt = polygons[i].points[j];
 
-            double t = (ground - pt.y) / light_dir[1];
+            float t = (ground - pt.y) / light_dir[1];
 
             pt.x += t*light_dir[0]; pt.y = ground; pt.z += t*light_dir[2];   
             poly.points.push_back(pt);
         }
         poly.color = RGB(0, 0, 0);
-        render_shape(poly);
+        render_shape(poly, false);
     }
+}
+
+void render_wireframe(vector<polygon> &polygons, point3d view){
+    vector<polygon> v = backface_culling(polygons, view);
+    for(int i = 0; i < v.size(); i++)
+        render_shape(v[i], true);
 }
 
 int main(){
@@ -351,6 +384,7 @@ int main(){
     setbkcolor(RGB(24, 24, 24));
 
     while(1){
+        render_shadow(polygons);
         painters_algorithm(root, view);
         if(kbhit()){
             bool needs_4update = process_keyboard(polygons);
@@ -359,7 +393,6 @@ int main(){
                 root = construct_tree(polygons, view);
             }
         }
-        render_shadow(polygons);
         swapbuffers();
         clearviewport();
         Sleep(1);
