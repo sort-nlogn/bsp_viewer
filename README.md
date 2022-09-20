@@ -7,10 +7,10 @@ Rendering some boring primitives, hidden surface removal using painters algorith
 ## Controls
 
   ```
-WASD               move along X and Y axes
-HJKLNM             rotation along X Y and Z axes
-arrow left/right   change light direction along X axis
-X                  change active figure
+WASDFG               moving along X Y and Z axes
+HJKLNM               rotation along X Y and Z axes
+arrow left/right     change light direction along X axis
+X                    change active figure
  
   ```
 
