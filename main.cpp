@@ -24,7 +24,7 @@ float centroid_prism[3] = {0.0, 0.0, -2.26666667};
 float centroid_cube[3] = {-1.5, 0.5, -2.5};
 
 float ground = -1.5;
-float light_dir[3] = {0.0, -1.0, 0.0};
+float light_pos[3] = {0.0, 5.0, -3.0};
 
 struct point3d{float x, y, z;};
 struct plane{float a, b, c, d;};
@@ -180,7 +180,7 @@ void dealloc_nodes(node *start_n){
     delete start_n;
 }
 
-void render_shape(polygon &poly, bool wireframe_only){
+void render_shape(polygon &poly){
     plane near_plane = {0.0, 0.0, 1.0, near_dist};
     plane far_plane = {0.0, 0.0, 1.0, far_dist};
     p_sign near_sgn = poly_type(poly, near_plane);
@@ -206,25 +206,8 @@ void render_shape(polygon &poly, bool wireframe_only){
     shape[2 * poly.points.size()] = shape[0];
     shape[2 * poly.points.size() + 1] = shape[1];
 
-
-    if(wireframe_only){
-        setcolor(RGB(255, 255, 255));
-        for(int i = 0; i < poly.points.size(); i++){
-            line(shape[2 * i], shape[2 * i + 1], shape[2 * (i + 1)], shape[2 * (i + 1) + 1]);
-        }
-        return;
-    }
-
-    // tone mapping
-    int icol = poly.color;
-    // float fcol[3] = {(float)GetRValue(icol) / 255, (float)GetGValue(icol) / 255, (float)GetBValue(icol) / 255};
-    // fcol[0] /= (fcol[0] + 1.0); fcol[0] = pow(fcol[0], 1.0 / 2.2);
-    // fcol[1] /= (fcol[1] + 1.0); fcol[1] = pow(fcol[1], 1.0 / 2.2);
-    // fcol[2] /= (fcol[2] + 1.0); fcol[2] = pow(fcol[2], 1.0 / 2.2);
-    // icol = RGB((int)(fcol[0] * 255), (int)(fcol[1] * 255), (int)(fcol[2] * 255));
-
-    setcolor(icol);
-    setfillstyle(SOLID_FILL, icol);
+    setcolor(poly.color);
+    setfillstyle(SOLID_FILL, poly.color);
     fillpoly(poly.points.size() + 1, shape);
     delete shape;
 }
@@ -234,7 +217,7 @@ void painters_algorithm(node *v, point3d view_p){
         return;
     if (v->l == nullptr && v->r == nullptr){
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i], false);
+            render_shape(v->polygons[i]);
         return;
     }
     plane pl = construct_plane(v->polygons[0].points[0], v->polygons[0].points[1], v->polygons[0].points[2]);
@@ -242,17 +225,17 @@ void painters_algorithm(node *v, point3d view_p){
     if(view_sgn > EPS){
         painters_algorithm(v->l, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i], false);
+            render_shape(v->polygons[i]);
         painters_algorithm(v->r, view_p);
     }else if(view_sgn < -EPS){
         painters_algorithm(v->r, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i], false);
+            render_shape(v->polygons[i]);
         painters_algorithm(v->l, view_p);
     }else{
         painters_algorithm(v->l, view_p);
         for(int i = 0; i < v->polygons.size(); i++)
-            render_shape(v->polygons[i], false);
+            render_shape(v->polygons[i]);
         painters_algorithm(v->r, view_p);
     }
 }
@@ -328,9 +311,9 @@ bool process_keyboard(vector<polygon> &pos){
     }else if(ch == 'm'){
         rotate(pos, 0.256, 0.0, 0.0); return true;
     }else if((int)ch == 75){
-        light_dir[0] -= 0.1; return false;
+        light_pos[0] -= 0.5; return false;
     }else if((int)ch == 77){
-        light_dir[0] += 0.1; return false;
+        light_pos[0] += 0.5; return false;
     }
     return false;
 }
@@ -341,21 +324,15 @@ void render_shadow(vector<polygon> &polygons){
         polygon poly;
         for(int j = 0; j < polygons[i].points.size(); j++){
             point3d pt = polygons[i].points[j];
-
+            float light_dir[3] = {pt.x - light_pos[0], pt.y - light_pos[1], pt.z - light_pos[2]};
             float t = (ground - pt.y) / light_dir[1];
 
             pt.x += t*light_dir[0]; pt.y = ground; pt.z += t*light_dir[2];   
             poly.points.push_back(pt);
         }
         poly.color = RGB(0, 0, 0);
-        render_shape(poly, false);
+        render_shape(poly);
     }
-}
-
-void render_wireframe(vector<polygon> &polygons, point3d view){
-    vector<polygon> v = backface_culling(polygons, view);
-    for(int i = 0; i < v.size(); i++)
-        render_shape(v[i], true);
 }
 
 int main(){
@@ -367,13 +344,13 @@ int main(){
      { {{-0.5, -0.5, -2.0}, {0.5, -0.5, -2.0}, {0.5,  0.5, -2.0}, {-0.5,  0.5, -2.0}}, RGB(152, 151, 26)},
      { {{0.0, -0.5, -2.8}, {-0.5, -0.5, -2.0}, {-0.5, 0.5, -2.0}, {0.0,  0.5, -2.8}},  RGB(215, 153, 33)},
      { {{0.5, -0.5, -2.0}, {0.0, -0.5, -2.8}, {0.0,  0.5, -2.8}, {0.5,  0.5, -2.0}},   RGB(69, 133, 136)},
-        // cube (now it's actually a pyramid (it should be))
-     { {{-2.0, 1.0, -2.0}, {-2.0, 0.0, -2.0}, {-1.0, 0.0, -2.0}, {-1.0, 1.0, -2.0}},   RGB(177, 98, 134)},
+
+     { {{-3.0, 1.0, -2.0}, {-3.0, 0.0, -2.0}, {-1.0, 0.0, -2.0}, {-1.0, 1.0, -2.0}},   RGB(177, 98, 134)},
      { {{-1.0, 0.0, -2.0}, {-1.0, 0.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 1.0, -2.0}},   RGB(104, 157, 122)},
-     { {{-2.0, 0.0, -2.0}, {-2.0, 1.0, -2.0}, {-2.0, 1.0, -3.0}, {-2.0, 0.0, -3.0}},   RGB(214, 93, 14)  },
-     { {{-2.0, 0.0, -2.0}, {-2.0, 0.0, -3.0}, {-1.0, 0.0, -3.0}, {-1.0, 0.0, -2.0}},   RGB(146, 131, 116)},
-     { {{-2.0, 1.0, -2.0}, {-1.0, 1.0, -2.0}, {-1.0, 1.0, -3.0}, {-2.0, 1.0, -3.0}},   RGB(251, 73, 53)  },
-     { {{-2.0, 0.0, -3.0}, {-2.0, 1.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 0.0, -3.0}},   RGB(184, 187, 38) }
+     { {{-3.0, 0.0, -2.0}, {-3.0, 1.0, -2.0}, {-3.0, 1.0, -3.0}, {-3.0, 0.0, -3.0}},   RGB(214, 93, 14)  },
+     { {{-3.0, 0.0, -2.0}, {-3.0, 0.0, -3.0}, {-1.0, 0.0, -3.0}, {-1.0, 0.0, -2.0}},   RGB(146, 131, 116)},
+     { {{-3.0, 1.0, -2.0}, {-1.0, 1.0, -2.0}, {-1.0, 1.0, -3.0}, {-3.0, 1.0, -3.0}},   RGB(251, 73, 53)  },
+     { {{-3.0, 0.0, -3.0}, {-3.0, 1.0, -3.0}, {-1.0, 1.0, -3.0}, {-1.0, 0.0, -3.0}},   RGB(184, 187, 38) }
     };
 
     node *root;
